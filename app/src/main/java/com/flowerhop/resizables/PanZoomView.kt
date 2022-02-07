@@ -8,6 +8,7 @@ import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
+import kotlinx.android.synthetic.main.pan_zoom_view.view.*
 import kotlin.math.abs
 import kotlin.math.acos
 import kotlin.math.atan2
