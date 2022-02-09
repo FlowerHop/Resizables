@@ -8,6 +8,7 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+import kotlin.math.atan
 
 abstract class PanZoomListener(context: Context): ScaleGestureDetector.SimpleOnScaleGestureListener(),
     View.OnTouchListener,
@@ -151,6 +152,8 @@ abstract class PanZoomListener(context: Context): ScaleGestureDetector.SimpleOnS
                         logMsg("Multi Touch Move",
                             "oriDegree: $oriDegree, currDegree: $currDegree")
 
+                        val degreeChange = touchRecords.getVector().degreeFromVector(mLastTouchRecords!!.getVector())*1.2
+
                         val oriCenter = mLastTouchRecords!!.getCenter()
                         val currCenter = touchRecords.getCenter()
                         logMsg("Multi Touch Move",
@@ -163,7 +166,7 @@ abstract class PanZoomListener(context: Context): ScaleGestureDetector.SimpleOnS
 
                         contentRoi = Roi(
                             newRectF,
-                            contentRoi.degree + (currDegree - oriDegree).toInt()
+                            contentRoi.degree + (degreeChange).toInt()
                         )
 
                         onChanging(contentRoi)

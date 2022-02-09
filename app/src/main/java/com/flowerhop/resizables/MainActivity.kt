@@ -16,7 +16,7 @@ class MainActivity : AppCompatActivity() {
 
         panZoomView.setRoi(Roi(
             rectF = RectF(0f, 0f, contentView.layoutParams.width.toFloat(), contentView.layoutParams.height.toFloat()),
-            30f
+            320f
         ))
 
         panZoomView.onSizeListener = object : PanZoomView.OnSizeListener {

@@ -8,11 +8,10 @@ import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
+import com.flowerhop.resizables.PanZoomView.MovingState.Gesture
+import com.flowerhop.resizables.PanZoomView.MovingState.Handle
 import kotlinx.android.synthetic.main.pan_zoom_view.view.*
-import kotlin.math.abs
-import kotlin.math.acos
-import kotlin.math.atan2
-import kotlin.math.sqrt
+import kotlin.math.*
 
 class PanZoomView: ConstraintLayout {
     companion object {
@@ -28,6 +27,12 @@ class PanZoomView: ConstraintLayout {
         fun onSizeChanging(roi: Roi)
         fun onSizeChanged(roi: Roi)
     }
+
+    enum class MovingState {
+        Gesture, Handle
+    }
+
+    private var movingState = Gesture
 
     private val mSolidPaint: Paint by lazy {
         Paint().apply {
@@ -86,17 +91,14 @@ class PanZoomView: ConstraintLayout {
     @SuppressLint("ClickableViewAccessibility")
     private fun initView(context: Context) {
         inflate(context, R.layout.pan_zoom_view, this)
-        setOnTouchListener(mPanZoomListener)
 
-        rotateHandle.setOnTouchListener(object : OnTouchListener {
+        val rotateHandleTouchListener = object : OnTouchListener {
             private var lastPointOnParent: PointF? = null
-
             override fun onTouch(view: View, motionEvent: MotionEvent): Boolean {
                 val pointOnParent = PointF(
-                    motionEvent.x + view.x,
-                    motionEvent.y + view.y
+                    motionEvent.x,
+                    motionEvent.y
                 )
-
                 when (motionEvent.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         logMsg("Touch Down",
@@ -123,30 +125,9 @@ class PanZoomView: ConstraintLayout {
                         val scaledWidth = contentRoi.rectF.width()*scaled
                         val scaledHeight = contentRoi.rectF.height()*scaled
 
-                        // rotate
-                        val originalDegree = (lastPointOnParent!!.degreeFrom(
-                            centerPointOfContent
-                        ) + 360)
-
-                        val currDegree = (pointOnParent.degreeFrom(
-                            centerPointOfContent
-                        ) + 360)
-
-//                        val newDegree = getDegree(
-//                            centerPointOfContent.x,
-//                            centerPointOfContent.y,
-//                            lastPointOnParent!!.x,
-//                            lastPointOnParent!!.y,
-//                            pointOnParent.x,
-//                            pointOnParent.y
-//                        )
-                        val newDegree = getDegree(
-                            centerPointOfContent,
-                            lastPointOnParent!!,
-                            pointOnParent
+                        val degreeChange = pointOnParent.vectorFrom(centerPointOfContent).degreeFromVector(
+                            lastPointOnParent!!.vectorFrom(centerPointOfContent)
                         )
-
-                        logMsg("newDegree", "${newDegree}")
 
                         contentRoi = contentRoi.copy(
                             rectF = RectF(
@@ -155,29 +136,48 @@ class PanZoomView: ConstraintLayout {
                                 centerPointOfContent.x + 0.5f*scaledWidth,
                                 centerPointOfContent.y + 0.5f*scaledHeight
                             ),
-                            degree = (contentRoi.degree + (newDegree)).toFloat()
+                            degree = (contentRoi.degree + (degreeChange)).toFloat()
                         )
 
                         lastPointOnParent = pointOnParent
 
                         onSizeChanging(contentRoi)
                     }
-                    MotionEvent.ACTION_CANCEL -> {
-                        logMsg("Touch Cancel", "cancel!")
-                    }
                     MotionEvent.ACTION_UP -> {
                         logMsg("Touch Up", "up!")
 
                         onSizeChanged(contentRoi)
                         lastPointOnParent = null
+                        movingState = Gesture
                     }
                     else -> {}
                 }
                 return false
             }
 
+        }
 
-        })
+        setOnTouchListener { view, motionEvent ->
+            when (motionEvent.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    val hitRect = Rect()
+                    rotateHandle.getHitRect(hitRect)
+                    movingState = if (hitRect.contains(
+                            motionEvent.x.toInt(),
+                            motionEvent.y.toInt()
+                        )
+                    ) Handle else Gesture
+                }
+                else -> {
+                }
+            }
+
+            when (movingState) {
+                Handle -> rotateHandleTouchListener.onTouch(view, motionEvent)
+                Gesture -> mPanZoomListener.onTouch(view, motionEvent)
+                else -> false
+            }
+        }
     }
 
     override fun onDraw(canvas: Canvas?) {
@@ -203,13 +203,13 @@ class PanZoomView: ConstraintLayout {
     }
 
     private fun onSizeStartChanging(roi: Roi) {
-        contentRoi = roi
+        setRoi(roi)
         invalidate()
         onSizeListener?.onSizeChanging(roi)
     }
 
     private fun onSizeChanging(roi: Roi) {
-        contentRoi = roi
+        setRoi(roi)
         invalidate()
 
         val pointF = roi.getPointAt(Corner.RightBottom)
@@ -222,40 +222,8 @@ class PanZoomView: ConstraintLayout {
     }
 
     private fun onSizeChanged(roi: Roi) {
-        contentRoi = roi
+        setRoi(roi)
         invalidate()
         onSizeListener?.onSizeChanged(roi)
-    }
-
-    private fun getDegree(
-        vertexPointX: Float,
-        vertexPointY: Float,
-        point0X: Float,
-        point0Y: Float,
-        point1X: Float,
-        point1Y: Float,
-    ): Double {
-        val vector =
-            (point0X - vertexPointX) * (point1X - vertexPointX) + (point0Y - vertexPointY) * (point1Y - vertexPointY)
-
-        val sqrt = sqrt((
-                (abs((point0X - vertexPointX) * (point0X - vertexPointX)) + abs((point0Y - vertexPointY) * (point0Y - vertexPointY)))
-                        * (abs((point1X - vertexPointX) * (point1X - vertexPointX)) + abs((point1Y - vertexPointY) * (point1Y - vertexPointY)))
-                ).toDouble())
-        val cos = (vector / sqrt).coerceAtMost(0.9999).coerceAtLeast(-0.9999)
-        Log.e(TAG, "getDegree: ${vector / sqrt}, ${cos}" )
-
-        val radian = acos(cos)
-
-        return (180 * radian / Math.PI)
-    }
-
-    private fun getDegree(pointO: PointF, pointA: PointF, pointB: PointF): Double {
-
-
-        val angA = atan2(pointA.y - pointO.y, pointA.x - pointO.x) *180/Math.PI
-        val angB = atan2(pointB.y - pointO.y, pointB.x - pointO.x) *180/Math.PI
-        logMsg("Test", "${angA}, ${angB}")
-        return angB - angA
     }
 }
